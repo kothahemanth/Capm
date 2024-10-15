@@ -2,7 +2,7 @@ using { com.hemanth.nnrg as db } from '../db/schema';
 
 service nnrg {
     entity Product  as projection on db.Product;
-    action productData(jsonData: String);
+    action productData() returns String;
 }
 
 annotate nnrg.Product with @odata.draft.enabled;

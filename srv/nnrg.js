@@ -1,42 +1,36 @@
-const cds = require("@sap/cds");
-const { v4: uuidv4 } = require("uuid");
-
-module.exports = cds.service.impl(async function () {
-
-
-  // Status object to keep track of the process
-  let fetchStatus = {
-    messages: [" Initializing... "],  // Array to keep track of status messages
-    completed: false
-  };
-
-  const cds = require('@sap/cds');
+const cds = require('@sap/cds');
 
 module.exports = cds.service.impl(async function () {
     const { Product } = this.entities;
-
     this.on('productData', async (req) => {
-        const jsonData = JSON.parse(req.data.jsonData); 
-
-        const tx = cds.transaction(req);
-
-        const insertPromises = jsonData.map((data) => {
-            return tx.run(
-                INSERT.into(Product).entries({
-                    product_id: data.product_id || '',
-                    product_name: data.product_name || '',
-                    product_img: data.product_img || '',
-                    product_sell: data.product_sell || '',
-                    product_cost: data.product_cost || ''
-                })
-            );
-        });
-
-        await Promise.all(insertPromises);
-
-        return { message: 'Data imported successfully!' };
+        try {
+            const products = await SELECT.from(Product);
+            const xmlData = jsonToXml(products);
+            // console.log("Generated XML Data:\n", xmlData);
+            return xmlData;
+        } catch (error) {
+            console.error("Error fetching products:", error);
+            return "<error>Failed to fetch product data</error>";
+        }
     });
 
-    
-});
+    function jsonToXml(jsonData) {
+        if (!Array.isArray(jsonData)) {
+            return "<error>Invalid JSON data provided</error>";
+        }
+
+        let xml = '<?xml version="1.0" ?>\n<products>\n';
+        jsonData.forEach(item => {
+            xml += '    <product>\n';
+            xml += `        <product_id>${item.product_id || 'N/A'}</product_id>\n`;
+            xml += `        <product_name>${item.product_name || 'N/A'}</product_name>\n`;
+            xml += `        <product_img>${item.product_img || 'N/A'}</product_img>\n`;
+            xml += `        <product_sell>${item.product_sell || 'N/A'}</product_sell>\n`;
+            xml += `        <product_cost>${item.product_cost || 'N/A'}</product_cost>\n`;
+            xml += '    </product>\n';
+        });
+
+        xml += '</products>';
+        return xml; 
+    }
 });
