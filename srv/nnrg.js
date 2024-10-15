@@ -1,4 +1,6 @@
 const cds = require('@sap/cds');
+const { XMLParser, XMLBuilder } = require('fast-xml-parser');
+const { Buffer } = require('buffer');
 
 module.exports = cds.service.impl(async function () {
     const { Product } = this.entities;
@@ -6,11 +8,17 @@ module.exports = cds.service.impl(async function () {
         try {
             const products = await SELECT.from(Product);
             const xmlData = jsonToXml(products);
-            // console.log("Generated XML Data:\n", xmlData);
-            return xmlData;
+
+            if (!validateXml(xmlData)) {
+                throw new Error("Invalid XML format");
+            }
+
+            const base64Data = Buffer.from(xmlData).toString('base64');
+
+            return base64Data;
         } catch (error) {
             console.error("Error fetching products:", error);
-            return "<error>Failed to fetch product data</error>";
+            return Buffer.from("<error>Failed to fetch product data</error>").toString('base64');
         }
     });
 
@@ -31,6 +39,17 @@ module.exports = cds.service.impl(async function () {
         });
 
         xml += '</products>';
-        return xml; 
+        return xml;
+    }
+
+    function validateXml(xmlData) {
+        const parser = new XMLParser();
+        try {
+            parser.parse(xmlData);
+            return true; 
+        } catch (error) {
+            console.error("XML validation error:", error);
+            return false;
+        }
     }
 });

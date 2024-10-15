@@ -49,7 +49,7 @@ sap.ui.define([
                 success: function (oData) {
                     console.log("XML DATA: ", oData);
 
-                    oStatusText.setText("Billing Docs fetched successfully!");
+                    oStatusText.setText("XML fetched successfully!");
 
                     oXMLDataTextArea.setValue(JSON.stringify(oData, null, 2)); // Convert JSON to string
                 },
