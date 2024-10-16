@@ -1,64 +1,69 @@
 sap.ui.define([
     "sap/m/MessageToast",
     "sap/ui/model/json/JSONModel",
-    "jquery.sap.global",
     "sap/m/Dialog",
-    "sap/m/Text",
     "sap/m/Button",
-    "sap/m/TextArea"
-], function (MessageToast, JSONModel, jQuery, Dialog, Text, Button, TextArea) {
+    "sap/ui/core/HTML"
+], function (MessageToast, JSONModel, Dialog, Button, HTML) {
     'use strict';
 
     return {
-        fetch: function (oBindingContext, aSelectedContexts) {
-            // Create a status text element
-            var oStatusText = new Text({ text: "Starting to Fetch XML Data" });
+        fetch : async function(oBindingContext, aSelectedContexts) {
+            console.log(aSelectedContexts);
+                
+            let mParameters = {
+                contexts: aSelectedContexts[0],
+                label: 'Confirm',
+                invocationGrouping: true    
+            };
 
-            // Create a TextArea for displaying the XML data
-            var oXMLDataTextArea = new TextArea({
-                width: "100%",
-                rows: 10,
-                editable: false, 
-                value: "" 
-            });
-
-            var oDialog = new Dialog({
-                title: "Fetching Details",
-                content: [oStatusText, oXMLDataTextArea],
-                beginButton: new Button({
-                    text: "Cancel",
-                    press: function () {
-                        oDialog.close();
+            this.editFlow.invokeAction('nnrg.productData', mParameters)
+                .then(function(result) {
+                    let base64PDF = result.getObject().value;  
+                    const byteCharacters = atob(base64PDF);
+                    const byteNumbers = new Array(byteCharacters.length);
+                    for (let i = 0; i < byteCharacters.length; i++) {
+                        byteNumbers[i] = byteCharacters.charCodeAt(i);
                     }
-                }),
-                endButton: new Button({
-                    text: "OK",
-                    press: function () {
-                        oDialog.close();
-                    }
+                    const byteArray = new Uint8Array(byteNumbers);
+                    const blob = new Blob([byteArray], { type: 'application/pdf' });
+                    const pdfUrl = URL.createObjectURL(blob);
+                    const oHtml = new HTML({
+                        content: `<iframe src="${pdfUrl}" width="100%" height="500px"></iframe>`
+                    });
+                    let oDialog = new Dialog({
+                        title: 'Generated PDF',
+                        contentWidth: "600px",
+                        contentHeight: "500px",
+                        verticalScrolling: true,
+                        content: oHtml,
+                        buttons: [
+                            new Button({
+                                text: 'Download',
+                                press: function () {
+                                    const link = document.createElement('a');
+                                    link.href = pdfUrl;
+                                    link.download = 'generated_pdf.pdf'; 
+                                    link.click();  
+                                }
+                            }),
+                            new Button({
+                                text: 'Close',
+                                press: function () {
+                                    oDialog.close();
+                                }
+                            })
+                        ],
+                        afterClose: function() {
+                            oDialog.destroy();
+                        }
+                    });
+                    oDialog.open();
                 })
-            });
-
-            oDialog.open();
-
-            jQuery.ajax({
-                url: "/odata/v4/nnrg/productData",
-                method: "POST",
-                contentType: "application/json",
-
-                success: function (oData) {
-                    console.log("XML DATA: ", oData);
-
-                    oStatusText.setText("XML fetched successfully!");
-
-                    oXMLDataTextArea.setValue(JSON.stringify(oData, null, 2)); // Convert JSON to string
-                },
-
-                error: function (oError) {
-                    console.error("ERROR: ", oError);
-                    oStatusText.setText("Error fetching billing docs!");
-                },
-            });
+                .catch(function(error) {
+                    MessageToast.show('Error occurred while converting to XML');
+                    console.error("Error:", error);
+                });
         }
     };
 });

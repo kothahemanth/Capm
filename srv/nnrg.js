@@ -1,55 +1,77 @@
 const cds = require('@sap/cds');
-const { XMLParser, XMLBuilder } = require('fast-xml-parser');
-const { Buffer } = require('buffer');
-
+const json2xml = require('json2xml');
+const axios = require('axios');
 module.exports = cds.service.impl(async function () {
-    const { Product } = this.entities;
-    this.on('productData', async (req) => {
-        try {
-            const products = await SELECT.from(Product);
-            const xmlData = jsonToXml(products);
+const {Product}=this.entities
+    this.on('productData','Product', async (req) => {
+        console.log(req.params);
+        const { ID } = req.params[0];  
+        const rowData = await SELECT.one.from(Product).where({ ID: ID });
 
-            if (!validateXml(xmlData)) {
-                throw new Error("Invalid XML format");
-            }
-
-            const base64Data = Buffer.from(xmlData).toString('base64');
-
-            return base64Data;
-        } catch (error) {
-            console.error("Error fetching products:", error);
-            return Buffer.from("<error>Failed to fetch product data</error>").toString('base64');
+        if (!rowData) {
+            return req.error(404, `No data found for ID: ${ID}`);
         }
+
+        console.log("Row data:", rowData);
+
+        // const xmlData = create({ version: '1.0', encoding: 'UTF-8' })
+        //     .ele('Product')  // Root element
+        //         .ele('ID').txt(rowData.ID).up()
+        //         .ele('product_id').txt(rowData.product_id || 'N/A').up() // Adjusted to match entity
+        //         .ele('product_name').txt(rowData.product_name || 'N/A').up() // Adjusted to match entity
+        //         .ele('product_img').txt(rowData.product_img || 'N/A').up() // Adjusted to match entity
+        //         .ele('product_cost').txt(rowData.product_cost ? rowData.product_cost.toString() : 'N/A').up() // Adjusted to match entity
+        //         .ele('product_sell').txt(rowData.product_sell ? rowData.product_sell.toString() : 'N/A').up() // Adjusted to match entity
+        //     .end({ prettyPrint: true });
+        
+        const xmlfun = (rowData) => {
+
+            const xmlData = json2xml({Product: rowData}, {header: true});
+            return xmlData;
+        }
+
+        const callxml = xmlfun(rowData);
+
+
+        console.log("Generated XML:", callxml);
+        const base64EncodedXML = Buffer.from(callxml).toString('base64');
+
+        console.log("Base64 Encoded XML:", base64EncodedXML);
+        try {
+          const authResponse = await axios.get('https://chembonddev.authentication.us10.hana.ondemand.com/oauth/token', {
+              params: {
+                  grant_type: 'client_credentials'
+              },
+              auth: {
+                  username: 'sb-ffaa3ab1-4f00-428b-be0a-1ec55011116b!b142994|ads-xsappname!b65488',
+                  password: 'e44adb92-4284-4c5f-8d41-66f8c1125bc5$F4bN1ypCgWzc8CsnjwOfT157HCu5WL0JVwHuiuwHcSc='
+              }
+          });
+          const accessToken = authResponse.data.access_token;
+          console.log("Access Token:", accessToken);
+          const pdfResponse = await axios.post('https://adsrestapi-formsprocessing.cfapps.us10.hana.ondemand.com/v1/adsRender/pdf?templateSource=storageName', {
+              xdpTemplate: "PrePrintedLabel/Default",
+              xmlData: base64EncodedXML, 
+              formType: "print",
+              formLocale: "",
+              taggedPdf: 1,
+              embedFont: 0
+          }, {
+              headers: {
+                  Authorization: `Bearer ${accessToken}`,
+                  'Content-Type': 'application/json'
+              }
+          });
+          const fileContent = pdfResponse.data.fileContent;
+          console.log("File Content:", fileContent);
+          return fileContent;
+
+      } catch (error) {
+          console.error("Error occurred:", error);
+          return req.error(500, "An error occurred while processing your request.");
+      }
+        
+
+       
     });
-
-    function jsonToXml(jsonData) {
-        if (!Array.isArray(jsonData)) {
-            return "<error>Invalid JSON data provided</error>";
-        }
-
-        let xml = '<?xml version="1.0" ?>\n<products>\n';
-        jsonData.forEach(item => {
-            xml += '    <product>\n';
-            xml += `        <product_id>${item.product_id || 'N/A'}</product_id>\n`;
-            xml += `        <product_name>${item.product_name || 'N/A'}</product_name>\n`;
-            xml += `        <product_img>${item.product_img || 'N/A'}</product_img>\n`;
-            xml += `        <product_sell>${item.product_sell || 'N/A'}</product_sell>\n`;
-            xml += `        <product_cost>${item.product_cost || 'N/A'}</product_cost>\n`;
-            xml += '    </product>\n';
-        });
-
-        xml += '</products>';
-        return xml;
-    }
-
-    function validateXml(xmlData) {
-        const parser = new XMLParser();
-        try {
-            parser.parse(xmlData);
-            return true; 
-        } catch (error) {
-            console.error("XML validation error:", error);
-            return false;
-        }
-    }
 });
